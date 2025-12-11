@@ -1,0 +1,216 @@
+// prevajanje datoteke *.proto:
+//   - namestitev modulov
+//      module load protobuf
+//      module load binutils/2.39-GCCcore-12.2.0
+//      go install google.golang.org/protobuf/cmd/protoc-gen-go@latest //samo ob prvi uporabi
+//      go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest //-||-
+//      //tega ne rabš k se že sam, export PATH="$PATH:$(go env GOPATH)/bin"
+//   - prevajanje
+//      protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative razpravljalnica/razpravljalnica.proto
+
+syntax = "proto3";
+
+package razpravljalnica;
+
+option go_package = "/razpravljalnica";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+////////////////////////////////////////////////////////////////////////////////
+// Basic data types
+////////////////////////////////////////////////////////////////////////////////
+
+message User {
+  int64 id = 1;
+  string name = 2;
+}
+
+message Topic {
+  int64 id = 1;
+  string name = 2;
+}
+
+message Message {
+  int64 id = 1;
+  int64 topic_id = 2;
+  int64 user_id = 3;
+  string text = 4;
+  google.protobuf.Timestamp created_at = 5;
+  int32 likes = 6;
+}
+
+message Like {
+  int64 topic_id = 1;
+  int64 message_id = 2;
+  int64 user_id = 3;
+}
+
+enum OpType {
+  OP_POST = 0;
+  OP_LIKE = 1;
+}
+
+message NodeInfo {
+  string node_id = 1;
+  string address = 2;
+  NodeRole role = 3;
+}
+
+enum NodeRole {
+  HEAD = 0;
+  INTERMEDIATE = 1;
+  TAIL = 2;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Data plane (client-facing API)
+////////////////////////////////////////////////////////////////////////////////
+
+service MessageBoard {
+  // Writes (only to head)
+  rpc CreateUser(CreateUserRequest) returns (User);
+  rpc CreateTopic(CreateTopicRequest) returns (Topic);
+  rpc PostMessage(PostMessageRequest) returns (Message);
+  rpc LikeMessage(LikeMessageRequest) returns (Message);
+  
+  // Get subscription node from head (load balancing)
+  rpc GetSubscriptionNode(SubscriptionNodeRequest) returns (SubscriptionNodeResponse);
+
+  // Reads (only from tail)
+  rpc ListTopics(google.protobuf.Empty) returns (ListTopicsResponse);
+  rpc GetMessages(GetMessagesRequest) returns (GetMessagesResponse);
+
+  // Subscribe to topics (can be any node, assigned by head)
+  rpc SubscribeTopic(SubscribeTopicRequest) returns (stream MessageEvent);
+}
+
+message CreateUserRequest {
+  string name = 1;
+}
+
+message CreateTopicRequest {
+  string name = 1;
+}
+
+message PostMessageRequest {
+  int64 topic_id = 1;
+  int64 user_id = 2;
+  string text = 3;
+}
+
+message LikeMessageRequest {
+  int64 topic_id = 1;
+  int64 message_id = 2;
+  int64 user_id = 3;
+}
+
+message ListTopicsResponse {
+  repeated Topic topics = 1;
+}
+
+message GetMessagesRequest {
+  int64 topic_id = 1;
+  int64 from_message_id = 2;
+  int32 limit = 3;
+}
+
+message GetMessagesResponse {
+  repeated Message messages = 1;
+}
+
+message SubscribeTopicRequest {
+  repeated int64 topic_id = 1;
+  int64 user_id = 2;
+  int64 from_message_id = 3;
+  string subscribe_token = 4;
+}
+
+message SubscriptionNodeRequest {
+  int64 user_id = 1;
+  repeated int64 topic_id = 2;
+}
+
+message SubscriptionNodeResponse {
+  string subscribe_token = 1;
+  NodeInfo node = 2;
+}
+
+message MessageEvent {
+  int64 sequence_number = 1;
+  OpType op = 2;
+  Message message = 3;
+  google.protobuf.Timestamp event_at = 4;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Control plane (cluster management)
+////////////////////////////////////////////////////////////////////////////////
+
+service ControlPlane {
+  rpc GetClusterState(google.protobuf.Empty) returns (GetClusterStateResponse);
+  rpc RegisterNode(RegisterNodeRequest) returns (RegisterNodeResponse);
+}
+
+message GetClusterStateResponse {
+  NodeInfo head = 1;
+  NodeInfo tail = 2;
+  repeated NodeInfo chain = 3;  // All nodes in order: head -> ... -> tail
+}
+
+message RegisterNodeRequest {
+  string node_id = 1;
+  string address = 2;
+}
+
+message RegisterNodeResponse {
+  bool success = 1;
+  NodeInfo assigned_role = 2;
+  NodeInfo successor = 3;  // Next node in chain (if not tail)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Internal replication service (node-to-node communication)
+////////////////////////////////////////////////////////////////////////////////
+
+service ChainReplication {
+  // Propagate write operation to next node in chain
+  rpc PropagateWrite(WriteOperation) returns (WriteAck);
+  
+  // Acknowledgment from successor back to predecessor
+  rpc AckWrite(WriteAck) returns (google.protobuf.Empty);
+  
+  // Heartbeat for chain health
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+message WriteOperation {
+  int64 sequence_number = 1;
+  OpType op_type = 2;
+  
+  oneof operation {
+    CreateUserRequest create_user = 3;
+    CreateTopicRequest create_topic = 4;
+    PostMessageRequest post_message = 5;
+    LikeMessageRequest like_message = 6;
+  }
+  
+  google.protobuf.Timestamp timestamp = 7;
+}
+
+message WriteAck {
+  int64 sequence_number = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message HeartbeatRequest {
+  string node_id = 1;
+  int64 last_sequence = 2;
+}
+
+message HeartbeatResponse {
+  string node_id = 1;
+  bool alive = 2;
+  int64 last_sequence = 3;
+}
