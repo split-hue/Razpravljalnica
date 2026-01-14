@@ -1,19 +1,25 @@
 // Razpravljalnica - distribuirana spletna storitev z verižno replikacijo
-//
-// Zagon strežnikov (3 vozlišča primer):
-//
-// Terminal 1 - HEAD:
-//     go run *.go -role head -p 9876 -successor localhost:9877 -all localhost:9876,localhost:9877,localhost:9878
-//
-// Terminal 2 - INTERMEDIATE:
-//     go run *.go -role intermediate -p 9877 -successor localhost:9878 -all localhost:9876,localhost:9877,localhost:9878
-//
-// Terminal 3 - TAIL:
-//     go run *.go -role tail -p 9878 -all localhost:9876,localhost:9877,localhost:9878
-//
-// Terminal 4 - Client:
-//     go run *.go -head localhost:9876 -tail localhost:9878
-//     go run *.go -head localhost:9876 -tail localhost:9878 -test
+
+/*
+Kaj počne:
+1. Parsira argumente iz ukazne vrstice
+- Server flags: -role, -p (port), -successor, -all.
+- Client flags: -head, -tail, -test.
+
+2. Odloči, ali bo zagnal klienta ali strežnik
+- Če sta podana head in tail, gre v client mode:
+	- ClientMain → osnovni odjemalec
+	- RunAdvancedClient → testni/napredni odjemalec
+- Če je podan role, gre v server mode:
+	- Nastavi NodeRole (HEAD, INTERMEDIATE, TAIL)
+	- Prebere seznam vseh vozlišč (allNodes) za uravnoteženje in verigo
+	- Pokliče Server(url, role, *successor, allNodeAddrs)
+
+3. Validacija argumentov
+- Preveri, da je vnešen veljaven role.
+- Preveri, da je podan -all.
+- V primeru napake izpiše navodila za zagon.
+*/
 
 package main
 
