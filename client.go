@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"razpravljalnica/razpravljalnica"
@@ -25,6 +26,17 @@ type Client struct {
 	ctrlClient  razpravljalnica.ControlPlaneClient
 	currentUser *razpravljalnica.User
 	reader      *bufio.Reader
+
+	// Shranjevanje subscriptions na topic
+	subscriptions map[string]*Subscription
+	subMutex      sync.Mutex
+}
+
+type Subscription struct {
+	Conn   *grpc.ClientConn                                  // hrani gRPC povezavo na vozlišče, ki je dodeljeno za subscription
+	Client razpravljalnica.MessageBoardClient                // gRPC client za komunikacijo
+	Stream razpravljalnica.MessageBoard_SubscribeTopicClient // stream, po katerem prejemamo dogodke
+	Done   chan struct{}                                     // kanal, s katerim gorutino lahko ustavimo
 }
 
 func NewClient(headURL, tailURL string) (*Client, error) {
@@ -61,6 +73,17 @@ func NewClient(headURL, tailURL string) (*Client, error) {
 func (c *Client) Close() {
 	c.headConn.Close()
 	c.tailConn.Close()
+
+	// Zapremo tudi vse subscriptions
+	c.subMutex.Lock()
+	for _, sub := range c.subscriptions {
+		close(sub.Done)
+		sub.Stream.CloseSend()
+		sub.Conn.Close()
+	}
+	c.subscriptions = nil
+	c.subMutex.Unlock()
+
 }
 
 func (c *Client) Run() {
@@ -134,6 +157,11 @@ func (c *Client) createUser() {
 }
 
 func (c *Client) createTopic() {
+	if c.currentUser == nil {
+		fmt.Println("Please create a user first (command 1)")
+		return
+	}
+
 	fmt.Print("Enter topic name: ")
 	name, _ := c.reader.ReadString('\n')
 	name = strings.TrimSpace(name)
@@ -304,6 +332,8 @@ func (c *Client) subscribeTopic() {
 
 	topicIDStrs := strings.Split(input, ",")
 	topicIDs := []int64{}
+	lastMsgIDs := make(map[int64]int64)
+
 	for _, idStr := range topicIDStrs {
 		id, err := strconv.ParseInt(strings.TrimSpace(idStr), 10, 64)
 		if err != nil {
@@ -311,6 +341,20 @@ func (c *Client) subscribeTopic() {
 			return
 		}
 		topicIDs = append(topicIDs, id)
+
+		// Pridobi zadnji ID sporočila tega topica iz TAIL (to bomo uporabili, da se ob subscriptionu na topic ne izpišejo vsi messages od topica za nazaj)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		msgs, err := c.tailClient.GetMessages(ctx, &razpravljalnica.GetMessagesRequest{
+			TopicId:       id,
+			FromMessageId: 0,
+			Limit:         1000000,
+		})
+		cancel()
+		if err != nil || len(msgs.Messages) == 0 {
+			lastMsgIDs[id] = 0
+		} else {
+			lastMsgIDs[id] = msgs.Messages[len(msgs.Messages)-1].Id
+		}
 	}
 
 	// Pridobi assigned node od HEAD
@@ -334,44 +378,67 @@ func (c *Client) subscribeTopic() {
 		fmt.Printf("Error connecting to subscription node: %v\n", err)
 		return
 	}
-	defer subConn.Close()
+	// defer subConn.Close() če naredimo to, se bo nehal izvajat in poslušat za te toppike
 
 	subClient := razpravljalnica.NewMessageBoardClient(subConn)
 
-	// Odpri pretok za naročnino
-	stream, err := subClient.SubscribeTopic(context.Background(), &razpravljalnica.SubscribeTopicRequest{
-		TopicId:        topicIDs,
-		UserId:         c.currentUser.Id,
-		FromMessageId:  0,
-		SubscribeToken: subNodeResp.SubscribeToken,
-	})
-	if err != nil {
-		fmt.Printf("Error subscribing to topics: %v\n", err)
-		return
+	if c.subscriptions == nil {
+		c.subscriptions = make(map[string]*Subscription)
+	}
+	// Gremo čez vse subscriptions
+	for _, id := range topicIDs {
+		// Odpri pretok za naročnino
+		stream, err := subClient.SubscribeTopic(context.Background(), &razpravljalnica.SubscribeTopicRequest{
+			TopicId: []int64{id},
+			UserId:  c.currentUser.Id,
+			// Da se izpišejo samo messages odkar smo se subscribali naprej, ne pa vsi messages za nazaj
+			FromMessageId:  lastMsgIDs[id] + 1,
+			SubscribeToken: subNodeResp.SubscribeToken,
+		})
+		if err != nil {
+			fmt.Printf("Error subscribing to topics: %v\n", err)
+			return
+		}
+
+		sub := &Subscription{
+			Conn:   subConn,
+			Client: subClient,
+			Stream: stream,
+			Done:   make(chan struct{}),
+		}
+
+		c.subMutex.Lock()
+		c.subscriptions[strconv.FormatInt(id, 10)] = sub // shranimo subscription v client
+		c.subMutex.Unlock()
+
+		// zalaufamo poslušanje za topic
+		go func(sub *Subscription) {
+			for {
+				select {
+				case <-sub.Done:
+					return
+				default:
+					event, err := sub.Stream.Recv()
+					if err == io.EOF || err != nil {
+						fmt.Printf("Error receiving event: %v\n", err)
+						return
+					}
+
+					opName := "POST"
+					if event.Op == razpravljalnica.OpType_OP_LIKE {
+						opName = "LIKE"
+					}
+					fmt.Printf("\n[Event #%d - %s] Topic: %d, Message: %d, User: %d, Text: %s, Likes: %d\n",
+						event.SequenceNumber, opName, event.Message.TopicId, event.Message.Id,
+						event.Message.UserId, event.Message.Text, event.Message.Likes)
+					fmt.Print("Enter command: ")
+				}
+			}
+		}(sub)
 	}
 
 	fmt.Printf("✓ Subscribed to topics %v on node %s\n", topicIDs, subNodeResp.Node.NodeId)
-	fmt.Println("Listening for events (press Ctrl+C to stop)...")
-
-	// Poslušaj dogodke
-	for {
-		event, err := stream.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			fmt.Printf("Error receiving event: %v\n", err)
-			break
-		}
-
-		opName := "POST"
-		if event.Op == razpravljalnica.OpType_OP_LIKE {
-			opName = "LIKE"
-		}
-		fmt.Printf("\n[Event #%d - %s] Topic: %d, Message: %d, User: %d, Text: %s, Likes: %d\n",
-			event.SequenceNumber, opName, event.Message.TopicId, event.Message.Id,
-			event.Message.UserId, event.Message.Text, event.Message.Likes)
-	}
+	fmt.Println("Listening for events in background...")
 }
 
 func (c *Client) getClusterState() {

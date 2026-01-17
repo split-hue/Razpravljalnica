@@ -80,6 +80,8 @@ go run *.go -head localhost:9876 -tail localhost:9878
 go run *.go -head localhost:9876 -tail localhost:9878 -test
 ```
 
+Na WINDOWS namesto **.go* napišemo *main.go server.go ... .go*.
+
 ## OPIS
 ### main.go
 - inicializira in zažene server.go

@@ -632,7 +632,7 @@ func generateToken() string {
 }
 
 func Server(url string, role razpravljalnica.NodeRole, successorAddr string, allNodeAddrs []string) {
-	hostname, err := os.Hostname() //dubi hostname stroja
+	hostname, err := os.Hostname() //dobi hostname stroja
 	if err != nil {
 		panic(err)
 	}
@@ -640,7 +640,7 @@ func Server(url string, role razpravljalnica.NodeRole, successorAddr string, all
 	nodeID := fmt.Sprintf("node_%s_%s", hostname, url)
 	node := NewChainNode(nodeID, url, role)
 
-	//nastau verižno topologijo
+	//nastavi verižno topologijo
 	if successorAddr != "" {
 		successorInfo := &razpravljalnica.NodeInfo{
 			NodeId:  fmt.Sprintf("successor_%s", successorAddr),
