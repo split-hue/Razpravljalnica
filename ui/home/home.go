@@ -6,6 +6,12 @@ import (
 	"github.com/rivo/tview"
 )
 
+//////////////////////
+// HOME PAGE
+// - posluša za subscribed topics
+// - exit na menu
+//////////////////////
+
 // NewMenuPage vrača tview.Primitive
 func NewHomePage(
 	pages *tview.Pages,

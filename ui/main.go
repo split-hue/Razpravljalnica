@@ -14,6 +14,13 @@ import (
 	"github.com/rivo/tview"
 )
 
+//////////////////////////
+// Začetni file za UI, ki
+// - generira nov instance clienta
+// - ustvari strani
+// - pokliče file menu
+/////////////////////////
+
 var app *tview.Application
 var pages *tview.Pages
 

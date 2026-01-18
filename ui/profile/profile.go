@@ -7,6 +7,12 @@ import (
 	"github.com/rivo/tview"
 )
 
+/////////////////
+// PROFILE page
+// - izpiše username
+// - exit na menu page
+/////////////////
+
 // NewTopicsPage vrača tview.Primitive
 func NewProfilePage(
 	pages *tview.Pages,

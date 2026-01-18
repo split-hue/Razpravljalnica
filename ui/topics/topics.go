@@ -10,6 +10,14 @@ import (
 	"github.com/rivo/tview"
 )
 
+//////////////////////
+// TOPICS page
+// - izpiše vse topics
+// - lahko dodaš nov topic (po tem se stran posodobi, da prikaže nov topic)
+// - ko klikneš na topic greš v CHAT_TOPIC
+// - exit na menu
+/////////////////////
+
 // NewTopicsPage vrača tview.Primitive
 func NewTopicsPage(
 	app *tview.Application,

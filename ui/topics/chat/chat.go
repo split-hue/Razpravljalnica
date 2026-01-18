@@ -9,6 +9,14 @@ import (
 	"github.com/rivo/tview"
 )
 
+///////////////////////////
+// CHAT_TOPIC PAGE
+// - izpiše vse messages/comments na ta topic
+// - lahko dodaš nov comment na ta topic (stran se refresha, da vidiš nov comment)
+// - lahko dodaš like na comment (stran se refreha, da vidiš nov like)
+// - exit na TOPIC page
+///////////////////////////
+
 func NewChatPage(pages *tview.Pages,
 	appClient *client.Client,
 	topic *razpravljalnica.Topic,

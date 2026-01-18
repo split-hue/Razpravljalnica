@@ -7,6 +7,17 @@ import (
 	"github.com/rivo/tview"
 )
 
+/////////////////////////////////
+// MENU file, ki ima dve strani
+// - na začetku se pokaže LOGIN PAGE
+// - ko se prijaviš, se prikaže MENU
+// - iz menu greš lahko na:
+// 		- Profile page
+// 		- Home page
+// 		- Topics page
+// 		- EXIT iz aplikacije (zapre vse povezave)
+/////////////////////////////////
+
 // NewMenuPage vrača tview.Primitive
 func NewMenuPage(pages *tview.Pages, quitCh chan bool) tview.Primitive {
 	list := tview.NewList().
@@ -76,7 +87,7 @@ func NewLoginPage(pages *tview.Pages, appClient *client.Client) tview.Primitive 
 	})
 
 	///////////////////////////
-	// DAMO VS lepo NA EKRAN //
+	// DAMO VSE lepo NA EKRAN //
 	//////////////////////////
 	flex := tview.NewFlex().SetDirection(tview.FlexRow)
 
