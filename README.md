@@ -79,6 +79,10 @@ Terminal 4 - Client:
 go run *.go -head localhost:9876 -tail localhost:9878
 go run *.go -head localhost:9876 -tail localhost:9878 -test
 ```
+Da zalaufamo uporabniški vmesnik:
+```
+go run ui/main.go -head localhost:9876 -tail localhost:9878
+```
 
 Na WINDOWS namesto **.go* napišemo *main.go server.go ... .go*.
 

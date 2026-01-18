@@ -1,4 +1,4 @@
-package main
+package client
 
 import (
 	"bufio"
@@ -141,6 +141,10 @@ func (c *Client) createUser() {
 	name, _ := c.reader.ReadString('\n')
 	name = strings.TrimSpace(name)
 
+	c.CreateUser(name)
+}
+
+func (c *Client) CreateUser(name string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -148,12 +152,19 @@ func (c *Client) createUser() {
 		Name: name,
 	})
 	if err != nil {
-		fmt.Printf("Error creating user: %v\n", err)
+		//fmt.Printf("Error creating user: %v\n", err)
 		return
 	}
 
 	c.currentUser = user
-	fmt.Printf("✓ User created on HEAD: %s (ID: %d)\n", user.Name, user.Id)
+	//fmt.Printf("✓ User created on HEAD: %s (ID: %d)\n", user.Name, user.Id)
+}
+
+func (c *Client) GetCurrentUser() *razpravljalnica.User {
+	if c.currentUser == nil {
+		return nil
+	}
+	return c.currentUser
 }
 
 func (c *Client) createTopic() {
@@ -166,29 +177,27 @@ func (c *Client) createTopic() {
 	name, _ := c.reader.ReadString('\n')
 	name = strings.TrimSpace(name)
 
+	c.CreateTopic(name)
+}
+
+func (c *Client) CreateTopic(name string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	topic, err := c.headClient.CreateTopic(ctx, &razpravljalnica.CreateTopicRequest{
+	_, err := c.headClient.CreateTopic(ctx, &razpravljalnica.CreateTopicRequest{
 		Name: name,
 	})
 	if err != nil {
-		fmt.Printf("Error creating topic: %v\n", err)
+		//fmt.Printf("Error creating topic: %v\n", err)
 		return
 	}
 
-	fmt.Printf("✓ Topic created on HEAD: %s (ID: %d)\n", topic.Name, topic.Id)
+	//fmt.Printf("✓ Topic created on HEAD: %s (ID: %d)\n", topic.Name, topic.Id)
 }
 
 func (c *Client) listTopics() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
 
-	response, err := c.tailClient.ListTopics(ctx, &emptypb.Empty{})
-	if err != nil {
-		fmt.Printf("Error listing topics from TAIL: %v\n", err)
-		return
-	}
+	response := c.ListTopics()
 
 	if len(response.Topics) == 0 {
 		fmt.Println("No topics available")
@@ -199,6 +208,19 @@ func (c *Client) listTopics() {
 	for _, topic := range response.Topics {
 		fmt.Printf("  [%d] %s\n", topic.Id, topic.Name)
 	}
+}
+
+func (c *Client) ListTopics() *razpravljalnica.ListTopicsResponse {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	response, err := c.tailClient.ListTopics(ctx, &emptypb.Empty{})
+	if err != nil {
+		fmt.Printf("Error listing topics from TAIL: %v\n", err)
+		return nil
+	}
+
+	return response
 }
 
 func (c *Client) postMessage() {
@@ -220,20 +242,24 @@ func (c *Client) postMessage() {
 	text, _ := c.reader.ReadString('\n')
 	text = strings.TrimSpace(text)
 
+	c.PostMessageToTopic(topicID, text)
+}
+
+func (c *Client) PostMessageToTopic(topicID int64, text string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	message, err := c.headClient.PostMessage(ctx, &razpravljalnica.PostMessageRequest{
+	_, err := c.headClient.PostMessage(ctx, &razpravljalnica.PostMessageRequest{
 		TopicId: topicID,
 		UserId:  c.currentUser.Id,
 		Text:    text,
 	})
 	if err != nil {
-		fmt.Printf("Error posting message to HEAD: %v\n", err)
+		//fmt.Printf("Error posting message to HEAD: %v\n", err)
 		return
 	}
 
-	fmt.Printf("✓ Message posted to HEAD (ID: %d)\n", message.Id)
+	//fmt.Printf("✓ Message posted to HEAD (ID: %d)\n", message.Id)
 }
 
 func (c *Client) getMessages() {
@@ -256,18 +282,12 @@ func (c *Client) getMessages() {
 	limitStr = strings.TrimSpace(limitStr)
 	limit, _ := strconv.ParseInt(limitStr, 10, 32)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	c.writeMessagesToConsole(topicID, fromID, limit)
+}
 
-	response, err := c.tailClient.GetMessages(ctx, &razpravljalnica.GetMessagesRequest{
-		TopicId:       topicID,
-		FromMessageId: fromID,
-		Limit:         int32(limit),
-	})
-	if err != nil {
-		fmt.Printf("Error getting messages from TAIL: %v\n", err)
-		return
-	}
+func (c *Client) writeMessagesToConsole(topicID int64, fromID int64, limit int64) {
+
+	response := c.GetMessagesByTopic(topicID, fromID, limit)
 
 	if len(response.Messages) == 0 {
 		fmt.Println("No messages found")
@@ -278,6 +298,23 @@ func (c *Client) getMessages() {
 	for _, msg := range response.Messages {
 		fmt.Printf("  [%d] User %d: %s (Likes: %d)\n", msg.Id, msg.UserId, msg.Text, msg.Likes)
 	}
+}
+
+func (c *Client) GetMessagesByTopic(topicID int64, fromID int64, limit int64) *razpravljalnica.GetMessagesResponse {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	response, err := c.tailClient.GetMessages(ctx, &razpravljalnica.GetMessagesRequest{
+		TopicId:       topicID,
+		FromMessageId: fromID,
+		Limit:         int32(limit),
+	})
+	if err != nil {
+		fmt.Printf("Error getting messages from TAIL: %v\n", err)
+		return nil
+	}
+
+	return response
 }
 
 func (c *Client) likeMessage() {
@@ -304,20 +341,24 @@ func (c *Client) likeMessage() {
 		return
 	}
 
+	c.LikeMessage(topicID, msgID)
+}
+
+func (c *Client) LikeMessage(topicID int64, msgID int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	message, err := c.headClient.LikeMessage(ctx, &razpravljalnica.LikeMessageRequest{
+	_, err := c.headClient.LikeMessage(ctx, &razpravljalnica.LikeMessageRequest{
 		TopicId:   topicID,
 		MessageId: msgID,
 		UserId:    c.currentUser.Id,
 	})
 	if err != nil {
-		fmt.Printf("Error liking message on HEAD: %v\n", err)
+		//fmt.Printf("Error liking message on HEAD: %v\n", err)
 		return
 	}
 
-	fmt.Printf("✓ Message liked on HEAD! Total likes: %d\n", message.Likes)
+	//fmt.Printf("✓ Message liked on HEAD! Total likes: %d\n", message.Likes)
 }
 
 func (c *Client) subscribeTopic() {

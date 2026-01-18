@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"strings"
 
+	"razpravljalnica/client"
 	"razpravljalnica/razpravljalnica"
 )
 
@@ -51,7 +52,7 @@ func main() {
 		if *testMode {
 			RunAdvancedClient(*headAddr, *tailAddr)
 		} else {
-			ClientMain(*headAddr, *tailAddr)
+			client.ClientMain(*headAddr, *tailAddr)
 		}
 		return
 	}
