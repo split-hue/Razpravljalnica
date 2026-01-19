@@ -1,9 +1,8 @@
-[![tview](https://pkg.go.dev/badge/github.com/rivo/tview)](https://pkg.go.dev/github.com/rivo/tview)
-[![Go Report](https://img.shields.io/badge/go%20report-A%2B-brightgreen.svg)](https://goreportcard.com/report/github.com/rivo/tview)
-
 # Razpravljalnica
 
 ![Razpravljalnica UI](assets/razpravljalnica.png)
+
+[![tview](https://pkg.go.dev/badge/github.com/rivo/tview.svg)](https://pkg.go.dev/github.com/rivo/tview)
 
 **Razpravljalnica** is a distributed discussion service built in **Go**, designed to demonstrate **Chain Replication** and real-time communication using **gRPC**.
 
@@ -80,7 +79,7 @@ The application supports two UI modes.
 ### TVIEW UI
 Interactive terminal UI built with https://pkg.go.dev/github.com/rivo/tview
 
-![tview UI](tview_ui.gif)
+![tview UI](assets/tview_ui.gif)
 
 Run:
 ```bash
