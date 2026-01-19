@@ -104,6 +104,13 @@ go run *.go -head localhost:9876 -tail localhost:9878
 
 ---
 
+## TEST
+Basic test that creates HEAD, INTERMEDIATE, TAIL. Then creates a test user, topic, message and like.
+Run it with:
+```bash
+go test -tags=integration -run TestBasicFlow -v
+```
+
 ## Architecture
 
 The system is based on **Chain Replication**:

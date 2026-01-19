@@ -123,14 +123,11 @@ func (p *ChatPage) GetMessagesAndRefresh() {
 func (p *ChatPage) PostMessageAndRefresh(input string) {
 	go func() {
 		new_message := p.cl.PostMessageToTopic(p.topic.Id, input)
-		//resp := p.cl.GetMessagesByTopic(p.topic.Id, 0, 0)
-
 		if new_message == nil {
 			return
 		}
 
 		p.app.QueueUpdateDraw(func() {
-			//p.RefreshUI(resp)
 			p.addMessageToList(new_message)
 		})
 	}()
