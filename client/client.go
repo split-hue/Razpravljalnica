@@ -30,13 +30,27 @@ type Client struct {
 	// Shranjevanje subscriptions na topic
 	subscriptions map[string]*Subscription
 	subMutex      sync.Mutex
+	newsCh        chan NewsEvent
+}
+
+type NewsEvent struct {
+	At       time.Time
+	Op       razpravljalnica.OpType
+	Sequence int64
+
+	TopicID   int64
+	MessageID int64
+	UserID    int64
+	Text      string
+	Likes     int32
 }
 
 type Subscription struct {
-	Conn   *grpc.ClientConn                                  // hrani gRPC povezavo na vozlišče, ki je dodeljeno za subscription
-	Client razpravljalnica.MessageBoardClient                // gRPC client za komunikacijo
-	Stream razpravljalnica.MessageBoard_SubscribeTopicClient // stream, po katerem prejemamo dogodke
-	Done   chan struct{}                                     // kanal, s katerim gorutino lahko ustavimo
+	TopicID int64
+	Conn    *grpc.ClientConn                                  // hrani gRPC povezavo na vozlišče, ki je dodeljeno za subscription
+	Client  razpravljalnica.MessageBoardClient                // gRPC client za komunikacijo
+	Stream  razpravljalnica.MessageBoard_SubscribeTopicClient // stream, po katerem prejemamo dogodke
+	Done    chan struct{}                                     // kanal, s katerim gorutino lahko ustavimo
 }
 
 func NewClient(headURL, tailURL string) (*Client, error) {
@@ -67,6 +81,9 @@ func NewClient(headURL, tailURL string) (*Client, error) {
 		tailClient: razpravljalnica.NewMessageBoardClient(tailConn),
 		ctrlClient: razpravljalnica.NewControlPlaneClient(headConn),
 		reader:     bufio.NewReader(os.Stdin),
+
+		subscriptions: make(map[string]*Subscription),
+		newsCh:        make(chan NewsEvent, 200),
 	}, nil
 }
 
@@ -167,6 +184,14 @@ func (c *Client) GetCurrentUser() *razpravljalnica.User {
 	return c.currentUser
 }
 
+func (c *Client) GetSubscriptions() map[string]*Subscription {
+	return c.subscriptions
+}
+
+func (c *Client) NewsEvents() <-chan NewsEvent {
+	return c.newsCh
+}
+
 func (c *Client) createTopic() {
 	if c.currentUser == nil {
 		fmt.Println("Please create a user first (command 1)")
@@ -177,20 +202,23 @@ func (c *Client) createTopic() {
 	name, _ := c.reader.ReadString('\n')
 	name = strings.TrimSpace(name)
 
-	c.CreateTopic(name)
+	_ = c.CreateTopic(name)
 }
 
-func (c *Client) CreateTopic(name string) {
+// RETURNS TOPIC
+func (c *Client) CreateTopic(name string) *razpravljalnica.Topic {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := c.headClient.CreateTopic(ctx, &razpravljalnica.CreateTopicRequest{
+	topic, err := c.headClient.CreateTopic(ctx, &razpravljalnica.CreateTopicRequest{
 		Name: name,
 	})
 	if err != nil {
 		//fmt.Printf("Error creating topic: %v\n", err)
-		return
+		return nil
 	}
+
+	return topic
 
 	//fmt.Printf("✓ Topic created on HEAD: %s (ID: %d)\n", topic.Name, topic.Id)
 }
@@ -216,7 +244,7 @@ func (c *Client) ListTopics() *razpravljalnica.ListTopicsResponse {
 
 	response, err := c.tailClient.ListTopics(ctx, &emptypb.Empty{})
 	if err != nil {
-		fmt.Printf("Error listing topics from TAIL: %v\n", err)
+		//fmt.Printf("Error listing topics from TAIL: %v\n", err)
 		return nil
 	}
 
@@ -242,22 +270,24 @@ func (c *Client) postMessage() {
 	text, _ := c.reader.ReadString('\n')
 	text = strings.TrimSpace(text)
 
-	c.PostMessageToTopic(topicID, text)
+	_ = c.PostMessageToTopic(topicID, text)
 }
 
-func (c *Client) PostMessageToTopic(topicID int64, text string) {
+func (c *Client) PostMessageToTopic(topicID int64, text string) *razpravljalnica.Message {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	_, err := c.headClient.PostMessage(ctx, &razpravljalnica.PostMessageRequest{
+	message, err := c.headClient.PostMessage(ctx, &razpravljalnica.PostMessageRequest{
 		TopicId: topicID,
 		UserId:  c.currentUser.Id,
 		Text:    text,
 	})
 	if err != nil {
 		//fmt.Printf("Error posting message to HEAD: %v\n", err)
-		return
+		return nil
 	}
+
+	return message
 
 	//fmt.Printf("✓ Message posted to HEAD (ID: %d)\n", message.Id)
 }
@@ -310,7 +340,7 @@ func (c *Client) GetMessagesByTopic(topicID int64, fromID int64, limit int64) *r
 		Limit:         int32(limit),
 	})
 	if err != nil {
-		fmt.Printf("Error getting messages from TAIL: %v\n", err)
+		//fmt.Printf("Error getting messages from TAIL: %v\n", err)
 		return nil
 	}
 
@@ -359,6 +389,121 @@ func (c *Client) LikeMessage(topicID int64, msgID int64) {
 	}
 
 	//fmt.Printf("✓ Message liked on HEAD! Total likes: %d\n", message.Likes)
+}
+
+func (c *Client) SubscribeTopic(topicID int64) error {
+	if c.currentUser == nil {
+		return nil //error
+	}
+
+	// zadnji message id iz TAIL (da zacnes dobivat future novice, ne past)
+	lastMsgID := int64(0)
+	ctx1, cancel1 := context.WithTimeout(context.Background(), 5*time.Second)
+	msgs, err := c.tailClient.GetMessages(ctx1, &razpravljalnica.GetMessagesRequest{
+		TopicId:       topicID,
+		FromMessageId: 0,
+		Limit:         1000000,
+	})
+	cancel1()
+	if err == nil && msgs != nil && len(msgs.Messages) > 0 {
+		lastMsgID = msgs.Messages[len(msgs.Messages)-1].Id
+	}
+
+	// HEAD dodeli subscription node
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
+	subNodeResp, err := c.headClient.GetSubscriptionNode(ctx2, &razpravljalnica.SubscriptionNodeRequest{
+		UserId:  c.currentUser.Id,
+		TopicId: []int64{topicID},
+	})
+	cancel2()
+	if err != nil {
+		return err
+	}
+
+	// connect na assigned node od HEADA
+	subConn, err := grpc.Dial(subNodeResp.Node.Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return err
+	}
+	subClient := razpravljalnica.NewMessageBoardClient(subConn)
+
+	// OPEN STREAM
+	stream, err := subClient.SubscribeTopic(context.Background(), &razpravljalnica.SubscribeTopicRequest{
+		TopicId:        []int64{topicID},
+		UserId:         c.currentUser.Id,
+		FromMessageId:  lastMsgID + 1,
+		SubscribeToken: subNodeResp.SubscribeToken,
+	})
+	if err != nil {
+		subConn.Close()
+		return err
+	}
+
+	if c.subscriptions == nil {
+		c.subscriptions = make(map[string]*Subscription)
+	}
+
+	sub := &Subscription{
+		TopicID: topicID,
+		Conn:    subConn,
+		Client:  subClient,
+		Stream:  stream,
+		Done:    make(chan struct{}),
+	}
+
+	key := strconv.FormatInt(topicID, 10)
+	c.subMutex.Lock()
+
+	// če je že obstajal subscription na isti topic, ga prej zapri
+	if old, ok := c.subscriptions[key]; ok {
+		close(old.Done)
+		old.Stream.CloseSend()
+		old.Conn.Close()
+	}
+	c.subscriptions[key] = sub
+	c.subMutex.Unlock()
+
+	// listener gorutina -> newsCh
+	go func(topicID int64, sub *Subscription) {
+		defer func() {
+			// cleanup na koncu
+			sub.Stream.CloseSend()
+			sub.Conn.Close()
+		}()
+
+		for {
+			select {
+			case <-sub.Done:
+				return
+			default:
+				event, err := sub.Stream.Recv()
+				if err == io.EOF || err != nil {
+					return
+				}
+				if event == nil || event.Message == nil {
+					continue
+				}
+
+				news_event := NewsEvent{
+					At:        time.Now(),
+					Op:        event.Op,
+					Sequence:  event.SequenceNumber,
+					TopicID:   event.Message.TopicId,
+					MessageID: event.Message.Id,
+					UserID:    event.Message.UserId,
+					Text:      event.Message.Text,
+					Likes:     event.Message.Likes,
+				}
+
+				select {
+				case c.newsCh <- news_event:
+				default:
+				}
+			}
+		}
+	}(topicID, sub)
+
+	return nil
 }
 
 func (c *Client) subscribeTopic() {

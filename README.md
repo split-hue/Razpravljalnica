@@ -1,141 +1,130 @@
+[![tview](https://pkg.go.dev/badge/github.com/rivo/tview)](https://pkg.go.dev/github.com/rivo/tview)
+[![Go Report](https://img.shields.io/badge/go%20report-A%2B-brightgreen.svg)](https://goreportcard.com/report/github.com/rivo/tview)
+
 # Razpravljalnica
-Razpravljalnica je distribuirana spletna storitev za izmenjavo mnenj med uporabniki o različnih temah. Uporabniki lahko:
-- ustvarijo račun in se prijavijo,
-- dodajajo nove teme,
-- objavljajo sporočila znotraj tem,
-- všečkajo sporočila, pri čemer se beleži število všečkov,
-- naročijo se na eno ali več tem in sproti prejmejo obvestila o novih sporočilih.
 
-**Arhitektura** temelji na **verižni replikaciji**, kjer so strežniki razporejeni kot HEAD, TAIL in vmesni INTERMEDIATE nodi:
-- HEAD: sprejema vse pisalne operacije (ustvarjanje uporabnikov, tem, objavljanje sporočil, všečkanje).
-- TAIL: zagotavlja bralne operacije (pridobivanje seznamov tem in sporočil).
-- INTERMEDIATE nodi: posredujejo in replikirajo pisalne operacije od HEAD proti TAIL.
+![Razpravljalnica UI](assets/razpravljalnica.png)
 
-Odjemalec se poveže z HEAD za pisanje in z TAIL za branje ter podpira tudi naročnine na teme, kjer strežnik sproti pošilja nova sporočila uporabniku.
+**Razpravljalnica** is a distributed discussion service built in **Go**, designed to demonstrate **Chain Replication** and real-time communication using **gRPC**.
 
-Storitev je implementirana v programskem jeziku Go in uporablja gRPC za komunikacijo med odjemalcem in strežnikom. gRPC je implementiran tudi za interno komunikacijo med strežniki.
+Users can:
+- create a new user (password logic not implemented),
+- create new discussion topics,
+- post messages inside topics,
+- like messages (with like counts stored),
+- subscribe to one or more topics and receive real-time notifications about new events.
 
-## Zagon aplikacije
-### Zagon serverjev
-```
-go run main.go --port 50051 --role HEAD
-go run main.go --port 50052 --role INTERMEDIATE --successor 50053
-go run main.go --port 50053 --role TAIL
-```
-HEAD node vedno prvi, TAIL zadnji, vmesni node-i kot intermediate.
-Vsak node pozna naslednjega za propagacijo pisalnih operacij.
+The application provides **two client interfaces**:
+- a classic **CMD client**,
+- an interactive **terminal UI** built with **tview**.
 
-### Zagon clienta
-```
-go run client.go --head localhost:50051 --tail localhost:50053
-```
-Odjemalec uporablja HEAD za pisanje in TAIL za branje.
-Odjemalec lahko komunicira z verigo preko gRPC.
+---
 
-## Podprte operacije v clientu
-| Ukaz                      | Opis                                                                            | Kje se izvaja                |
-| ------------------------- | ------------------------------------------------------------------------------- | ---------------------------- |
-| `1 - Create User`         | Ustvari novega uporabnika                                                       | HEAD                         |
-| `2 - Create Topic`        | Ustvari novo temo                                                               | HEAD                         |
-| `3 - List Topics`         | Prikaže seznam vseh tem                                                         | TAIL                         |
-| `4 - Post Message`        | Objavi sporočilo v izbrani temi                                                 | HEAD                         |
-| `5 - Get Messages`        | Prebere sporočila iz teme                                                       | TAIL                         |
-| `6 - Like Message`        | Všečka sporočilo                                                                | HEAD                         |
-| `7 - Subscribe to Topics` | Naroči se na nove dogodke v izbranih temah                                      | Izbrani node (load-balanced) |
-| `8 - Get Cluster State`   | Prikaže trenutno stanje klastra (HEAD, TAIL, chain)                             | HEAD                         |
-| `9 - Demo Mode`           | Samodejno izvede testne operacije (ustvari uporabnike, teme, sporočila, všečke) | HEAD/Tail                    |
+## Supported Client Operations
 
-#### Demo Mode
-Samodejno:
-- Ustvari uporabnike (Alice, Bob).
-- Ustvari teme (Programiranje, Šport).
-- Počaka na replikacijo.
-- Objavi sporočila na HEAD.
-- Prebere sporočila iz TAIL.
-- Všečka sporočila.
-- Preveri všečke iz TAIL.
-- Prikaže stanje klastra.
+| Command | Description | Executed On |
+|------|-------------|-------------|
+| `1 - Create User` | Create a new user | HEAD |
+| `2 - Create Topic` | Create a new topic | HEAD |
+| `3 - List Topics` | Display all topics | TAIL |
+| `4 - Post Message` | Post a message to a topic | HEAD |
+| `5 - Get Messages` | Read messages from a topic | TAIL |
+| `6 - Like Message` | Like a message | HEAD |
+| `7 - Subscribe to Topics` | Subscribe to events in selected topics | Assigned node (load-balanced) |
+| `8 - Get Cluster State` | Display cluster state (HEAD, TAIL, chain) | HEAD |
+| `9 - Demo Mode` | Automatically runs test operations (users, topics, messages, likes) | HEAD / TAIL |
 
-## Konkreten primer uporabe
-Primer za tri vozlišča.
+---
 
-Terminal 1 - HEAD:
-```
+## Example Usage
+
+Example setup with **three nodes**.
+
+### Terminal 1 – HEAD
+```bash
 go run *.go -role head -p 9876 -successor localhost:9877 -all localhost:9876,localhost:9877,localhost:9878
 ```
 
-Terminal 2 - INTERMEDIATE:
-```
+### Terminal 2 – INTERMEDIATE
+```bash
 go run *.go -role intermediate -p 9877 -successor localhost:9878 -all localhost:9876,localhost:9877,localhost:9878
 ```
 
-Terminal 3 - TAIL:
-```
+### Terminal 3 – TAIL
+```bash
 go run *.go -role tail -p 9878 -all localhost:9876,localhost:9877,localhost:9878
 ```
 
-Terminal 4 - Client:
-```
+### Terminal 4 – Client
+
+```bash
+# CMD client
 go run *.go -head localhost:9876 -tail localhost:9878
+
+# TVIEW client
+go run ui/main.go -head localhost:9876 -tail localhost:9878
+
+# Test mode
 go run *.go -head localhost:9876 -tail localhost:9878 -test
 ```
-Da zalaufamo uporabniški vmesnik:
-```
+
+> On **Windows**, replace `*.go` with explicit file names  
+> (e.g. `main.go server.go ...`).
+
+---
+
+## User Interface
+
+The application supports two UI modes.
+
+### TVIEW UI
+Interactive terminal UI built with https://pkg.go.dev/github.com/rivo/tview
+
+![tview UI](tview_ui.gif)
+
+Run:
+```bash
 go run ui/main.go -head localhost:9876 -tail localhost:9878
 ```
 
-Na WINDOWS namesto **.go* napišemo *main.go server.go ... .go*.
+Features:
+- keyboard navigation,
+- dynamic data refresh,
+- subscribed topics overview,
+- real-time news feed.
 
-## OPIS
-### main.go
-- inicializira in zažene server.go
-- Lahko glavni vstopni point za strežnik.
-- Inicializira konfiguracijo (npr. seznam strežnikov v verigi).
-- Zažene gRPC strežnik (server.go).
+### CMD UI
+Classic command-line usage with all output printed directly to the terminal.
 
-### server.go
-- implementira interface iz razpravljalnica_grpc.pb.go
-- Implementacija gRPC server interface (metode WritePost, GetPosts, …).
-- Logika verižne replikacije: pošiljanje pisalnih zahtev do naslednjega strežnika, vračanje acknowledgment-a.
-- Inicializira strežnik, posluša na določenem portu.
+Run:
+```bash
+go run *.go -head localhost:9876 -tail localhost:9878
+```
 
-### client.go
-- kliče metode preko stub-a iz razpravljalnica_grpc.pb.go, ki uporablja strukture iz razpravljalnica.pb.go
-- odjemalec
-- Ustvari gRPC connection, kliče metode preko stub-a.
-- Lahko zaženeš več instanc za simulacijo več odjemalcev.
+---
 
-### client_advanced.go (testni odjemalec)
-Testni odjemalec, ki avtomatizira preverjanje vseh funkcionalnosti Razpravljalnice:
-- ustvarjanje uporabnikov in tem,
-- objavljanje sporočil,
-- branje sporočil z TAIL,
-- všečkanje in preverjanje replikacije,
-- naročnine in load-balancing.
+## Architecture
 
-### start_chain.sh
-- avtomatizira zagon več strežnikov za verižno replikacijo.
-- Skripta za zagon več instanc strežnikov v verigi.
-- Nastavi port vsake instance in “nextServerAddr” za verigo.
+The system is based on **Chain Replication**:
 
-### go.mod & go.sum
-- go.mod: definira modul, verzije paketov (vključno z gRPC Go).
-- go.sum: hash za preverjanje integritete paketov.
+- **HEAD**  
+  Handles all write operations:
+  - user creation,
+  - topic creation,
+  - message posting,
+  - liking messages.
 
-### razpravljalnica.proto
-- generira razpravljalnica.pb.go (structs) + razpravljalnica_grpc.pb.go (stub)
-- Definicija gRPC servisa in vseh metod (WritePost, GetPosts, SubscribeTopic, …).
-- Definicija sporočil (request/response) z Protocol Buffers.
-- To je “master definicija”, iz katere gRPC generira kodo za Go.
+- **INTERMEDIATE nodes**  
+  Forward and replicate write operations from HEAD toward TAIL.
 
-### razpravljalnica.pb.go
-- Avtomatsko generirana Go koda za Protocol Buffers (strukturirana sporočila).
-- Vsebuje Go strukture za request/response tipe.
-- Odjemalec in strežnik jo uporabljata za serializacijo in deserializacijo podatkov.
+- **TAIL**  
+  Handles all read operations:
+  - listing topics,
+  - reading messages.
 
-### razpravljalnica_grpc.pb.go
-- Avtomatsko generirana Go koda za gRPC stub-e.
-- Vsebuje:
-    - Server interface, ki ga implementiraš (WritePost(ctx, req), …).
-    - Client stub, ki kliče metode kot lokalne funkcije, a dejansko gre RPC klic preko gRPC.
-- Strežnik implementira interface, odjemalec uporablja stub.
+The client:
+- writes via **HEAD**,
+- reads via **TAIL**,
+- can subscribe to topics and receive **real-time push events** via gRPC.
+
+The entire system is implemented in **Go**, with **gRPC** used for both client–server and internal server communication.

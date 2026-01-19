@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"log"
 	"razpravljalnica/client"
-	"razpravljalnica/razpravljalnica"
 	"razpravljalnica/ui/home"
 	"razpravljalnica/ui/menu"
 	"razpravljalnica/ui/topics"
-	"razpravljalnica/ui/topics/chat"
 
 	"github.com/rivo/tview"
 )
@@ -26,8 +24,6 @@ var pages *tview.Pages
 
 // Kanali
 var quitCh = make(chan bool)
-var topicCh = make(chan bool)
-var messageCh = make(chan *razpravljalnica.Topic)
 
 func main() {
 	// argumenti
@@ -56,44 +52,17 @@ func main() {
 		app.Stop() // zapre aplikacijo
 	}()
 
-	// channel za obdelavo novih tem
-	go func() {
-		for range topicCh {
-			app.QueueUpdateDraw(func() {
-				// RECREATE PAGE TOPICS
-				pages.RemovePage("topics")
-				topicsPage := topics.NewTopicsPage(app, pages, appClient, topicCh, messageCh)
-				pages.AddPage("topics", topicsPage, true, true)
-				pages.SwitchToPage("topics")
-			})
-		}
-	}()
-
-	// channel za obdelavo novih tem
-	go func() {
-		for topic := range messageCh {
-			pageName := fmt.Sprintf("chat_%d", topic.Id)
-			// Rekreiramo Topics Page
-			app.QueueUpdateDraw(func() {
-				// RECREATE PAGE TOPICS
-				pages.RemovePage(pageName)
-				chatPage := chat.NewChatPage(pages, appClient, topic, messageCh)
-				pages.AddPage(pageName, chatPage, true, true)
-				pages.SwitchToPage(pageName)
-			})
-		}
-	}()
-
 	// ustvari strani
+	homePage := home.NewHomePage(app, pages, appClient)
+	topicsPage := topics.NewTopicsPage(app, pages, appClient)
+
+	menuPage := menu.NewMenuPage(pages, quitCh, topicsPage, homePage)
 	loginPage := menu.NewLoginPage(pages, appClient)
-	homePage := home.NewHomePage(pages, appClient)
-	menuPage := menu.NewMenuPage(pages, quitCh)
-	topicsPage := topics.NewTopicsPage(app, pages, appClient, topicCh, messageCh)
 
 	pages.AddPage("login", loginPage, true, true) // pokaži login na startu
 	pages.AddPage("menu", menuPage, true, false)
-	pages.AddPage("home", homePage, true, false)
-	pages.AddPage("topics", topicsPage, true, false) // topics stran je skrita
+	pages.AddPage("home", homePage.Root, true, false)
+	pages.AddPage("topics", topicsPage.Root, true, false)
 
 	// pokliči menu
 	app.SetRoot(pages, true)

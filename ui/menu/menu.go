@@ -2,7 +2,10 @@ package menu
 
 import (
 	"razpravljalnica/client"
+	"razpravljalnica/ui/home"
 	"razpravljalnica/ui/profile"
+	"razpravljalnica/ui/topics"
+	"time"
 
 	"github.com/rivo/tview"
 )
@@ -19,7 +22,7 @@ import (
 /////////////////////////////////
 
 // NewMenuPage vrača tview.Primitive
-func NewMenuPage(pages *tview.Pages, quitCh chan bool) tview.Primitive {
+func NewMenuPage(pages *tview.Pages, quitCh chan bool, topicsPage *topics.TopicsPage, homePage *home.HomePage) tview.Primitive {
 	list := tview.NewList().
 		AddItem("", "", 0, nil).
 		AddItem("WELCOME TO RAZPRAVLJALNICA", "Select an action", 0, nil).
@@ -29,9 +32,11 @@ func NewMenuPage(pages *tview.Pages, quitCh chan bool) tview.Primitive {
 		}).
 		AddItem("Home", "", 'h', func() {
 			pages.SwitchToPage("home") // preklopi na profile stran
+			homePage.RefreshSubscriptionsList()
 		}).
 		AddItem("Browse Topics", "", 't', func() {
 			pages.SwitchToPage("topics") // preklopi na topics stran
+			topicsPage.StartPolling(2 * time.Second)
 		}).
 		AddItem("Quit", "Exit app", 'q', func() {
 			quitCh <- true // Pošljemo v channel quitCh, da želimo da se aplikacija zapre
