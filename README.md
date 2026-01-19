@@ -1,6 +1,6 @@
 # Razpravljalnica
 
-![Razpravljalnica UI](assets/razpravljalnica.png)
+![tview UI](assets/tview_ui.gif)
 
 [![tview](https://pkg.go.dev/badge/github.com/rivo/tview.svg)](https://pkg.go.dev/github.com/rivo/tview)
 
@@ -72,14 +72,14 @@ go run *.go -head localhost:9876 -tail localhost:9878 -test
 
 ---
 
+![Razpravljalnica UI](assets/razpravljalnica.png)
+
 ## User Interface
 
 The application supports two UI modes.
 
 ### TVIEW UI
 Interactive terminal UI built with https://pkg.go.dev/github.com/rivo/tview
-
-![tview UI](assets/tview_ui.gif)
 
 Run:
 ```bash
