@@ -62,9 +62,9 @@ func main() {
 		fmt.Println("  Client mode: -head <addr> -tail <addr> [-test]")
 		fmt.Println("\nExample 3-node setup:")
 		fmt.Println("  Node 1 (HEAD):         go run . -role head -p 9876 -successor localhost:9877 -all localhost:9876,localhost:9877,localhost:9878")
-		fmt.Println("  Node 2 (INTERMEDIATE): go run *.go -role intermediate -p 9877 -successor localhost:9878 -all localhost:9876,localhost:9877,localhost:9878")
-		fmt.Println("  Node 3 (TAIL):         go run *.go -role tail -p 9878 -all localhost:9876,localhost:9877,localhost:9878")
-		fmt.Println("  Client:                go run *.go -head localhost:9876 -tail localhost:9878")
+		fmt.Println("  Node 2 (INTERMEDIATE): go run . -role intermediate -p 9877 -successor localhost:9878 -all localhost:9876,localhost:9877,localhost:9878")
+		fmt.Println("  Node 3 (TAIL):         go run . -role tail -p 9878 -all localhost:9876,localhost:9877,localhost:9878")
+		fmt.Println("  Client:                go run . -head localhost:9876 -tail localhost:9878")
 		return
 	}
 

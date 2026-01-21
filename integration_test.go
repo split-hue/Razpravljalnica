@@ -125,9 +125,9 @@ func startCluster(t *testing.T) []proc {
 	t.Helper()
 
 	// ZAŽENEMO UKAZE KOT BI JIH MI
-	// go run *.go -role head -p 9876 -successor localhost:9877 -all localhost:9876,localhost:9877,localhost:9878
-	// go run *.go -role intermediate -p 9877 -successor localhost:9878 -all localhost:9876,localhost:9877,localhost:9878
-	// go run *.go -role tail -p 9878 -all localhost:9876,localhost:9877,localhost:9878
+	// go run . -role head -p 9876 -successor localhost:9877 -all localhost:9876,localhost:9877,localhost:9878
+	// go run . -role intermediate -p 9877 -successor localhost:9878 -all localhost:9876,localhost:9877,localhost:9878
+	// go run . -role tail -p 9878 -all localhost:9876,localhost:9877,localhost:9878
 
 	head := startNode(t, "head", "9876", intAddr, true)
 	inter := startNode(t, "intermediate", "9877", tailAddr, true)

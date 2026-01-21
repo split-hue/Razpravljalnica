@@ -37,38 +37,41 @@ The application provides **two client interfaces**:
 
 ## Example Usage
 
-Example setup with **three nodes**.
+Example setup with **three nodes**. There are **two ways** to start the cluster:
 
-### Terminal 1 – HEAD
+### Automatically start x nodes
 ```bash
-go run *.go -role head -p 9876 -successor localhost:9877 -all localhost:9876,localhost:9877,localhost:9878
+./start_chain.sh x
 ```
 
-### Terminal 2 – INTERMEDIATE
+### Manually start the nodes
+#### Terminal 1 – HEAD
 ```bash
-go run *.go -role intermediate -p 9877 -successor localhost:9878 -all localhost:9876,localhost:9877,localhost:9878
+go run . -role head -p 9876 -successor localhost:9877 -all localhost:9876,localhost:9877,localhost:9878
 ```
 
-### Terminal 3 – TAIL
+#### Terminal 2 – INTERMEDIATE
 ```bash
-go run *.go -role tail -p 9878 -all localhost:9876,localhost:9877,localhost:9878
+go run . -role intermediate -p 9877 -successor localhost:9878 -all localhost:9876,localhost:9877,localhost:9878
 ```
 
-### Terminal 4 – Client
+#### Terminal 3 – TAIL
+```bash
+go run . -role tail -p 9878 -all localhost:9876,localhost:9877,localhost:9878
+```
+
+#### Terminal 4 – Client
 
 ```bash
 # CMD client
-go run *.go -head localhost:9876 -tail localhost:9878
+go run . -head localhost:9876 -tail localhost:9878
 
 # TVIEW client
 go run ui/main.go -head localhost:9876 -tail localhost:9878
 
 # Test mode
-go run *.go -head localhost:9876 -tail localhost:9878 -test
+go run . -head localhost:9876 -tail localhost:9878 -test
 ```
-
-> On **Windows**, replace `*.go` with explicit file names  
-> (e.g. `main.go server.go ...`).
 
 ---
 
@@ -99,7 +102,7 @@ Classic command-line usage with all output printed directly to the terminal.
 
 Run:
 ```bash
-go run *.go -head localhost:9876 -tail localhost:9878
+go run . -head localhost:9876 -tail localhost:9878
 ```
 
 ---

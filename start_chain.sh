@@ -87,7 +87,7 @@ for i in $(seq 0 $((NUM_NODES-1))); do
 
     echo -e "${BLUE}Starting node $((i+1))/$NUM_NODES [$ROLE_STR] on port $PORT...${RESET}"
 
-    go run *.go -role "$ROLE" -p "$PORT" $SUCCESSOR -all "$ALL_ADDRS" > "$LOG_FILE" 2>&1 &
+    go run . -role "$ROLE" -p "$PORT" $SUCCESSOR -all "$ALL_ADDRS" > "$LOG_FILE" 2>&1 &
     PID=$!
     PIDS+=($PID)
 
@@ -138,10 +138,10 @@ echo "Log files: ${LOG_FILES[*]}"
 echo ""
 echo "--------------------------------------------------------------"
 echo "To test:"
-echo "  go run *.go -head localhost:$BASE_PORT -tail localhost:$((BASE_PORT + NUM_NODES - 1)) -test"
+echo "  go run . -head localhost:$BASE_PORT -tail localhost:$((BASE_PORT + NUM_NODES - 1)) -test"
 echo ""
 echo "To run interactive client:"
-echo "  go run *.go -head localhost:$BASE_PORT -tail localhost:$((BASE_PORT + NUM_NODES - 1))"
+echo "  go run . -head localhost:$BASE_PORT -tail localhost:$((BASE_PORT + NUM_NODES - 1))"
 echo ""
 echo "To view logs:"
 echo "  tail -f ${LOG_FILES[0]}"
@@ -175,7 +175,7 @@ trap cleanup INT TERM
 if [ "$2" = "-test" ]; then
     echo "Running automatic test..."
     sleep 2
-    go run *.go -head localhost:$BASE_PORT -tail localhost:$((BASE_PORT + NUM_NODES - 1)) -test
+    go run . -head localhost:$BASE_PORT -tail localhost:$((BASE_PORT + NUM_NODES - 1)) -test
     cleanup
 else
     echo "Press Ctrl+C to stop all nodes..."
